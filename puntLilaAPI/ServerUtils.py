@@ -5,14 +5,13 @@ from puntLilaAPI.config import id
 
 def is_valid_user(token: str) -> int or None:
     try:
-        # Specify the CLIENT_ID of the app that accesses the backend:
+        # Specify the CLIENT_ID of the app that accesses the backend
         idinfo = id_token.verify_oauth2_token(token, requests.Request(), id)
 
         if idinfo['iss'] not in ['accounts.google.com', 'https://accounts.google.com']:
             raise ValueError('Wrong issuer.')
-        # ID token is valid. Get the user's Google Account ID from the decoded token.
-        userid = idinfo['sub']
-        return userid
+        # ID token is valid. Return the user's Google Account ID from the decoded token.
+        return idinfo['sub']
     except ValueError:
         # Invalid token
         return None
