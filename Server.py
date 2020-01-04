@@ -1,11 +1,14 @@
 from flask import Flask, jsonify, request, json
 from gevent.pywsgi import WSGIServer
 from puntLilaAPI.ServerUtils import *
+from puntLilaAPI.config import SERVER_IP, SERVER_PORT, firebase_config
 from flask_cors import CORS, cross_origin
-
+import pyrebase
 
 app = Flask(__name__)
 cors = CORS(app, headers='Content-Type')
+firebase = pyrebase.initialize_app(firebase_config)
+db = firebase.database()
 
 
 @app.route('/authorize', methods=['POST'])
@@ -69,24 +72,42 @@ def manage_phonenumbers(phone: str) -> json:
      it expects a JSON payload with 'phone' and 'loggedUserEmail'.
      Always returns a JSON with the changes made/new data
     """
-    if request.method == "POST":
-        # If method is post we expect to receive the new number to be added and the email of the admin adding it
+    if request.method == "POST" or request.method == "PUT":
+        # If method is post or put we expect to receive the new number to be added, the description
+        # and the email of the admin adding it
         data = request.json
-        phone_number = data['phone']
-        added_by = data['loggedUserEmail']
-        return jsonify(message="{} is adding new phone with number {}".format(added_by, phone_number))
+        phone_number = phone
+        try:
+            phone_description = data['description']
+            added_by = data['loggedUserEmail']
+        except:
+            return jsonify(error='Missing description or loggedUserEmail'), 400
+        store_data = {"description": phone_description,
+                      "added_by": added_by}
+        db.child('phones').child(phone_number).set(store_data)
+
+        return jsonify(db.child('phones').child(phone).get().val()), 201
+
     elif request.method == "GET":
         # If using GET verb and no number is indicated, get full list. Otherwise, get info of the specified one
         if phone is not None:
-            return jsonify(message="Returning info of phone: {}".format(phone))
+            returning = db.child('phones').child(phone).get().val()
+            if returning is not None:
+                return jsonify(returning), 200
+            return jsonify(error="Phone not found"), 404
         else:
-            return jsonify(message="Returning full list of phones")
-    elif request.method == "PUT":
-        # If verb is PUT update info of the specified phone and return the new one
-        return jsonify(message="Updating phone: {}".format(phone))
+            returning = db.child('phones').get().val()
+            if returning is not None:
+                return jsonify(returning), 200
+            return jsonify(error="Database is empty"), 404
+
     elif request.method == "DELETE":
         # If verb is DELETE, delete the specified number and return the list again
-        return jsonify(message="Deleting phone: {}".format(phone))
+        if phone is not None:
+            db.child('phones').child(phone).remove()
+            return jsonify(db.child('phones').get().val()), 200
+        else:
+            return jsonify(error="No phone indicated in the route"), 400
 
 
 @app.route('/notifications', defaults={'phone': None}, methods=['POST'])
@@ -106,5 +127,6 @@ def manage_notifications() -> json:
 
 
 if __name__ == '__main__':
-    http_server = WSGIServer(('', 5000), app)
+    http_server = WSGIServer((SERVER_IP, SERVER_PORT), app)
+    print("Starting server on {}:{}".format(SERVER_IP, SERVER_PORT))
     http_server.serve_forever()
