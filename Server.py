@@ -80,7 +80,8 @@ def manage_phonenumbers(phone: str) -> json:
         try:
             phone_description = data['description']
             added_by = data['loggedUserEmail']
-        except:
+        except TypeError as err:
+            print("[ERROR] An exception ocurred, type: {}, cause: {}".format(err.__class__.__name__, err.__cause__))
             return jsonify(error='Missing description or loggedUserEmail'), 400
         store_data = {"description": phone_description,
                       "added_by": added_by}
