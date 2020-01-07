@@ -37,30 +37,45 @@ def authorize() -> json:
 @app.route('/admins/<admin>', methods=['POST', 'GET', 'PUT', 'DELETE'])
 @cross_origin()
 def manage_admins(admin: str) -> json:
+    if request.method == "GET":
+        # If using GET verb and no admin is indicated, get full list of admins. Otherwise, get info of the specified one
+        if admin is not None:
+            returning = db.child('admins').child(admin).get().val()
+            if returning is not None:
+                return jsonify(returning), 200
+            return jsonify(error="Admin not found"), 404
+        else:
+            returning = db.child('admins').get().val()
+            if returning is not None:
+                return jsonify(returning), 200
+            return jsonify(error="Database is empty"), 404
+
+    elif request.method == "POST" or request.method == "PUT":
+        # If method is post we expect to receive the email of the new admin and the email of who made him admin
+        data = request.json
+        try:
+            email = data['email']
+            admin_by = data['loggedUserEmail']
+        except TypeError as err:
+            print("[ERROR] An exception ocurred, type: {}, cause: {}".format(err.__class__.__name__, err.__cause__))
+            return jsonify(error='Missing admin email (email) or loggedUserEmail'), 400
+        store_data = {"added_by": admin_by}
+        # Store the admin using his email as key
+        db.child('admins').child(email).set(store_data)
+        return jsonify(db.child('admins').child(email).get().val()), 201
+
+    elif request.method == "DELETE":
+        # If verb is DELETE, delete specified admin and return the whole list again
+        if admin is not None:
+            db.child('admins').child(admin).remove()
+            return jsonify(db.child('admin').get().val()), 200
+        else:
+            return jsonify(error="No admin indicated in the route"), 400
     """
     This endpoint '/admins/<admin>' works with POST, GET, PUT AND DELETE. With the POST and PUT methods
      it expects a JSON payload with 'email' and 'loggedUserEmail'.
      Always returns a JSON with the changes made/new data
     """
-    if request.method == "POST":
-        # If method is post we expect to receive the email of the new admin and
-        # the email of who made him admin
-        data = request.json
-        email = data['email']
-        admin_by = data['loggedUserEmail']
-        return jsonify(message="{} created new admin with email {}".format(admin_by, email))
-    elif request.method == "GET":
-        # If using GET verb and no admin is indicated, get full list of admins. Otherwise, get info of the specified one
-        if admin is not None:
-            return jsonify(message="Returning info of admin: {}".format(admin))
-        else:
-            return jsonify(message="Returning full list of admins")
-    elif request.method == "PUT":
-        # If verb is PUT, update info of the specified admin
-        return jsonify(message="Updating admin: {}".format(admin))
-    elif request.method == "DELETE":
-        # If verb is DELETE, delete specified admin and return the whole list again
-        return jsonify(message="Deleting admin: {}".format(admin))
 
 
 @app.route('/phones', defaults={'phone': None}, methods=['POST', 'GET', 'PUT', 'DELETE'])
